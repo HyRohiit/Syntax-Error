@@ -16,11 +16,8 @@ The clustering dashboard is a triage aid: it surfaces repeated topics and their 
 
 ## Features
 
-### Implemented in the SynQ prototype (`collegium-chat-app/`)
+### Implemented in the SynQ prototype (`synQ/`)
 
-- Student and admin registration, login, current-session lookup, and logout.
-- Student enrollment numbers and a shared admin registration code.
-- Password hashing with salted PBKDF2-HMAC-SHA256.
 - Authenticated WebSocket classroom chat with sender identity and timestamps.
 - Admin badges on messages sent by admin accounts.
 - Topic clustering using `all-MiniLM-L6-v2` sentence embeddings and cosine distance.
@@ -35,8 +32,6 @@ The clustering dashboard is a triage aid: it surfaces repeated topics and their 
 - Persistent database storage, so accounts and class data survive restarts.
 - Multiple classrooms, teacher-managed membership, and classroom-level permissions.
 - Deployment hardening and production operations, such as secure-cookie configuration for HTTPS, rate limits, account recovery, and managed secret storage.
-
-The root React app (`src/`) is a separate chat-recap prototype. It can summarize pasted or imported chat exports and has its own continuous audio recap flow, but it is not wired to SynQ's registration and shared-chat experience.
 
 ## Architecture
 
