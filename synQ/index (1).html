@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speech Doubt Monitor</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #25352b; background: #f4f6f2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px 16px 50px; }
+    main { max-width: 1280px; margin: auto; }
+    h1 { margin: 0 0 6px; font-size: clamp(1.7rem, 4vw, 2.4rem); }
+    .intro { margin: 0 0 22px; color: #69766d; line-height: 1.55; }
+    .panel { background: white; border: 1px solid #e0e7df; border-radius: 14px; padding: 18px; margin: 14px 0; box-shadow: 0 5px 18px #22332208; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; color: white; background: #527d57; font: inherit; font-weight: 650; cursor: pointer; }
+    button:hover:not(:disabled) { background: #416b47; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    #stop { background: #9b594c; }
+    #recording-status { color: #68756b; font-size: .92rem; }
+    #student-name { width: 150px; padding: 10px; border: 1px solid #dce4dc; border-radius: 8px; font: inherit; }
+    #msg { flex: 1; min-width: 0; padding: 13px; border: 1px solid #dce4dc; border-radius: 10px; font: inherit; }
+    .card { background: white; border: 1px solid #e2e7e1; border-left: 5px solid #398a45; border-radius: 9px; padding: 14px; margin: 10px 0; }
+    .card.High { border-left-color: #c5483d; }
+    .card.Medium { border-left-color: #db8c35; }
+    .summary { margin: 7px 0; color: #59645c; }
+    .bar-bg { height: 9px; overflow: hidden; border-radius: 6px; background: #edf0ed; margin-top: 9px; }
+    .bar-fill { height: 100%; border-radius: inherit; background: #719a72; transition: width .25s; }
+    .error { color: #a13e34 !important; }
+    .chat-header .error { color: #ffd9d4 !important; }
+    .tabs { display: flex; gap: 8px; margin: 22px 0 14px; }
+    .tabs button { background: #e4ebe3; color: #34513a; }
+    .tabs button[aria-selected="true"] { background: #527d57; color: white; }
+    [hidden] { display: none !important; }
+    #voice-summary { line-height: 1.6; }
+    #voice-summary h3 { margin: 16px 0 6px; }
+    .chat-layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(280px, .9fr); gap: 16px; align-items: start; }
+    .chat-room { display: flex; flex-direction: column; min-height: 72vh; padding: 0; overflow: hidden; }
+    .chat-header { padding: 16px 20px; background: #527d57; color: white; }
+    .chat-header h2 { margin: 0 0 4px; }
+    .chat-header p { margin: 0; color: #e9f0e8; font-size: .92rem; }
+    #chat-messages { flex: 1; min-height: 380px; max-height: 62vh; overflow-y: auto; padding: 18px; background: #f0f3ed; }
+    .chat-empty { color: #6d786e; text-align: center; padding: 36px 12px; }
+    .chat-message { width: fit-content; max-width: min(78%, 650px); padding: 9px 12px; margin: 8px 0; border-radius: 12px 12px 12px 3px; background: white; box-shadow: 0 2px 5px #22332210; overflow-wrap: anywhere; }
+    .chat-message.mine { margin-left: auto; border-radius: 12px 12px 3px 12px; background: #dff1d9; }
+    .chat-meta { display: flex; gap: 12px; justify-content: space-between; color: #55745a; font-size: .78rem; margin-bottom: 4px; }
+    .chat-message p { margin: 0; white-space: pre-wrap; line-height: 1.45; }
+    #doubt-form { display: flex; gap: 9px; align-items: center; padding: 12px; border-top: 1px solid #e0e7df; }
+    #cluster-sidebar { position: sticky; top: 12px; max-height: 80vh; overflow-y: auto; }
+    #cluster-sidebar h2 { margin: 0; }
+    #cluster-status { color: #68756b; font-size: .88rem; margin: 8px 0 14px; }
+    .frequency { font-size: .9rem; color: #59645c; }
+    #chunk-list { display: grid; gap: 8px; margin-top: 14px; max-height: 50vh; overflow-y: auto; }
+    .chunk { padding: 10px 12px; background: #f4f6f2; border-left: 3px solid #719a72; border-radius: 6px; line-height: 1.45; }
+    .chunk time { display: block; color: #68756b; font-size: .78rem; margin-bottom: 3px; }
+    @media (max-width: 800px) { .chat-layout { grid-template-columns: 1fr; } #cluster-sidebar { position: static; max-height: none; } .chat-room { min-height: 65vh; } }
+    @media (max-width: 540px) { body { padding: 18px 12px 34px; } .panel { padding: 14px; } #doubt-form { flex-direction: column; align-items: stretch; } #student-name { width: 100%; } #doubt-form button { align-self: flex-end; } .chat-message { max-width: 90%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Live Speech Doubt Monitor</h1>
+    <p class="intro">Collect student doubts into topic clusters, or record a class and turn its transcript into useful notes.</p>
+
+    <nav class="tabs" aria-label="App sections">
+      <button type="button" class="tab" data-panel="chat-panel" aria-selected="true">Student doubts</button>
+      <button type="button" class="tab" data-panel="voice-panel" aria-selected="false">Voice notes</button>
+    </nav>
+
+    <div id="voice-panel" hidden>
+      <section class="panel" aria-label="Speech capture">
+        <h2>Record a class</h2>
+        <p class="intro">Audio is transcribed in English in 15-second chunks. When you stop, all chunks are summarized together into one note.</p>
+        <div class="controls">
+          <button id="start" type="button">Start recording</button>
+          <button id="stop" type="button" disabled>Stop recording</button>
+          <span id="recording-status" role="status">Recording is off.</span>
+        </div>
+        <div id="chunk-list" aria-live="polite"><p class="chat-empty">Recognized chunks will appear here while recording.</p></div>
+      </section>
+      <section class="panel" aria-label="Generated class note">
+        <h2>Recording summary</h2>
+        <div id="voice-summary" aria-live="polite" class="summary">Your complete note will appear here after you stop recording.</div>
+      </section>
+    </div>
+
+    <div id="chat-panel">
+      <div class="chat-layout">
+        <section class="panel chat-room" aria-label="Student doubt group chat">
+          <header class="chat-header">
+            <h2>Class doubt group</h2>
+            <p id="connection" role="status">Connecting to the classroom…</p>
+          </header>
+          <div id="chat-messages" role="log" aria-live="polite">
+            <p class="chat-empty">Student questions will appear here.</p>
+          </div>
+          <form id="doubt-form">
+            <input id="student-name" maxlength="40" placeholder="Your name" autocomplete="name" aria-label="Your name">
+            <input id="msg" maxlength="1000" placeholder="Type a doubt to the group…" autocomplete="off" aria-label="Your doubt">
+            <button id="send" type="submit" disabled>Send</button>
+          </form>
+        </section>
+        <aside id="cluster-sidebar" class="panel" aria-label="Doubt topic clusters">
+          <h2>Doubt topics</h2>
+          <p id="cluster-status" aria-live="polite">Clusters update after every 4 new chats.</p>
+          <section id="list" aria-live="polite"></section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ------------------------------------------------------------ Elements
+    const $ = id => document.getElementById(id);
+    const connection = $('connection'), input = $('msg'), nameInput = $('student-name');
+    const sendButton = $('send'), list = $('list'), chatMessages = $('chat-messages');
+    const clusterStatus = $('cluster-status'), chunkList = $('chunk-list');
+    const startButton = $('start'), stopButton = $('stop');
+    const recordingStatus = $('recording-status'), voiceSummary = $('voice-summary');
+
+    const BATCH_SIZE = 4;
+    const CHUNK_MS = 15000;
+    const TARGET_RATE = 16000;
+    const senderId = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    let ws = null, reconnectTimer = null, pageClosing = false;
+    let totalChats = 0, clusteredChats = 0;
+
+    nameInput.value = localStorage.getItem('doubt-chat-name') || '';
+
+    // ------------------------------------------------------------ Tabs
+    document.querySelectorAll('.tab').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
+        $('chat-panel').hidden = button.dataset.panel !== 'chat-panel';
+        $('voice-panel').hidden = button.dataset.panel !== 'voice-panel';
+      });
+    });
+
+    // ------------------------------------------------------------ Chat
+    function setConnection(text, isError) {
+      connection.textContent = text;
+      connection.classList.toggle('error', Boolean(isError));
+    }
+
+    function showEmptyChat() {
+      const empty = document.createElement('p');
+      empty.className = 'chat-empty';
+      empty.textContent = 'Student questions will appear here.';
+      chatMessages.replaceChildren(empty);
+    }
+
+    function appendChatMessage(message) {
+      if (chatMessages.querySelector('.chat-empty')) chatMessages.replaceChildren();
+      const bubble = document.createElement('article');
+      bubble.className = 'chat-message' + (message.sender_id === senderId ? ' mine' : '');
+      const meta = document.createElement('div');
+      meta.className = 'chat-meta';
+      const author = document.createElement('strong');
+      author.textContent = message.name || 'Student';
+      const time = document.createElement('time');
+      time.textContent = new Date((message.time || Date.now() / 1000) * 1000)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      meta.append(author, time);
+      const body = document.createElement('p');
+      body.textContent = message.text;
+      bubble.append(meta, body);
+      chatMessages.append(bubble);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function updateClusterStatus() {
+      const pending = Math.max(0, totalChats - clusteredChats);
+      clusterStatus.textContent = pending
+        ? `${clusteredChats} chats clustered · ${pending} new since last update (updates every ${BATCH_SIZE})`
+        : `${clusteredChats} chats clustered · updates every ${BATCH_SIZE} new chats`;
+    }
+
+    function renderClusters(data) {
+      totalChats = Number(data.total || 0);
+      clusteredChats = Number(data.clustered_total || 0);
+      const items = Array.isArray(data.clusters) ? data.clusters : [];
+
+      if (!items.length) {
+        const empty = document.createElement('p');
+        empty.className = 'chat-empty';
+        empty.textContent = `No topic clusters yet. Clustering starts after ${BATCH_SIZE} messages.`;
+        list.replaceChildren(empty);
+      } else {
+        list.replaceChildren(...items.map(cluster => {
+          const card = document.createElement('article');
+          card.className = 'card ' + (['High', 'Medium', 'Low'].includes(cluster.level) ? cluster.level : 'Low');
+          const title = document.createElement('strong');
+          title.textContent = cluster.topic;
+          const frequency = document.createElement('p');
+          frequency.className = 'frequency';
+          frequency.textContent = `Asked ${cluster.count} ${cluster.count === 1 ? 'time' : 'times'} · ${cluster.intensity}% of clustered doubts`;
+          const summary = document.createElement('p');
+          summary.className = 'summary';
+          summary.textContent = cluster.summary;
+          const bar = document.createElement('div');
+          bar.className = 'bar-bg';
+          const fill = document.createElement('div');
+          fill.className = 'bar-fill';
+          fill.style.width = `${Math.max(0, Math.min(100, Number(cluster.intensity) || 0))}%`;
+          bar.append(fill);
+          card.append(title, frequency, summary, bar);
+          return card;
+        }));
+      }
+      updateClusterStatus();
+    }
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.onopen = () => {
+        setConnection('Connected to the classroom.', false);
+        sendButton.disabled = false;
+      };
+
+      ws.onmessage = event => {
+        let data;
+        try { data = JSON.parse(event.data); } catch { return; }
+
+        if (data.type === 'error' || data.error) {
+          setConnection(data.error || 'Server error.', true);
+        } else if (data.type === 'state') {
+          if (Array.isArray(data.messages) && data.messages.length) {
+            chatMessages.replaceChildren();
+            data.messages.forEach(appendChatMessage);
+          } else {
+            showEmptyChat();
+          }
+          renderClusters(data);
+        } else if (data.type === 'chat_message') {
+          appendChatMessage(data.message);
+          totalChats += 1;
+          updateClusterStatus();
+        } else if (data.type === 'clusters') {
+          renderClusters(data);
+        }
+      };
+
+      ws.onerror = () => setConnection('Connection error.', true);
+
+      ws.onclose = () => {
+        sendButton.disabled = true;
+        if (pageClosing) return;
+        setConnection('Disconnected. Reconnecting…', true);
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+    }
+
+    $('doubt-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) { input.focus(); return; }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        setConnection('Chat is disconnected. Please wait for reconnect.', true);
+        return;
+      }
+      const name = nameInput.value.trim().slice(0, 40) || 'Student';
+      nameInput.value = name;
+      localStorage.setItem('doubt-chat-name', name);
+      ws.send(JSON.stringify({ type: 'chat', name, sender_id: senderId, text }));
+      input.value = '';
+      input.focus();
+    });
+
+    connect();
+
+    // ------------------------------------------------------------ Recording
+    let audioContext = null, stream = null, source = null, processor = null, silentGain = null;
+    let recording = false, finishing = false, buffers = [], sampleCount = 0;
+    let queue = Promise.resolve();
+    const transcriptChunks = [];
+
+    function encodeWav(samples, rate) {
+      const bytes = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(bytes);
+      const label = (offset, text) => { for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i)); };
+      label(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); label(8, 'WAVE'); label(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+      label(36, 'data'); view.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) {
+        const v = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(44 + i * 2, v < 0 ? v * 32768 : v * 32767, true);
+      }
+      return new Blob([bytes], { type: 'audio/wav' });
+    }
+
+    function downsample(samples, fromRate, toRate) {
+      if (fromRate <= toRate) return samples;
+      const ratio = fromRate / toRate;
+      const out = new Float32Array(Math.floor(samples.length / ratio));
+      for (let i = 0; i < out.length; i++) {
+        const start = Math.floor(i * ratio);
+        const end = Math.min(samples.length, Math.floor((i + 1) * ratio));
+        let sum = 0;
+        for (let j = start; j < end; j++) sum += samples[j];
+        out[i] = sum / Math.max(1, end - start);
+      }
+      return out;
+    }
+
+    function takeSamples(length) {
+      const output = new Float32Array(length);
+      let written = 0;
+      while (written < length && buffers.length) {
+        const first = buffers[0];
+        const take = Math.min(first.length, length - written);
+        output.set(first.subarray(0, take), written);
+        written += take;
+        sampleCount -= take;
+        if (take === first.length) buffers.shift();
+        else buffers[0] = first.subarray(take);
+      }
+      return output;
+    }
+
+    function enqueueChunk(samples) {
+      const rate = audioContext.sampleRate;
+      const outRate = Math.min(rate, TARGET_RATE);
+      const blob = encodeWav(downsample(samples, rate, outRate), outRate);
+      queue = queue.then(() => transcribeChunk(blob));
+    }
+
+    async function transcribeChunk(blob) {
+      if (!blob.size) return;
+      recordingStatus.classList.remove('error');
+      recordingStatus.textContent = recording ? 'Recording… (transcribing previous chunk)' : 'Transcribing the final chunk…';
+      try {
+        const form = new FormData();
+        form.append('file', blob, 'chunk.wav');
+        const response = await fetch('/api/transcribe', { method: 'POST', body: form });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || `Transcription failed (${response.status})`);
+        const text = (data.text || '').trim();
+        if (text) {
+          transcriptChunks.push(text);
+          if (chunkList.querySelector('.chat-empty')) chunkList.replaceChildren();
+          const chunk = document.createElement('div');
+          chunk.className = 'chunk';
+          const timeEl = document.createElement('time');
+          timeEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          chunk.append(timeEl, document.createTextNode(text));
+          chunkList.append(chunk);
+          chunkList.scrollTop = chunkList.scrollHeight;
+        }
+        if (recording) recordingStatus.textContent = 'Recording…';
+      } catch (error) {
+        console.error('Transcription error:', error);
+        recordingStatus.textContent = error.message || 'Failed to transcribe a chunk.';
+        recordingStatus.classList.add('error');
+      }
+    }
+
+    async function startCapture() {
+      if (recording || finishing) return;
+      recordingStatus.classList.remove('error');
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        recordingStatus.textContent = 'Microphone needs HTTPS or http://localhost / http://127.0.0.1.';
+        recordingStatus.classList.add('error');
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+        });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        await audioContext.resume();
+
+        source = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        silentGain = audioContext.createGain();
+        silentGain.gain.value = 0; // keeps the graph running without echoing to speakers
+
+        // Correct order: mic -> processor -> silent gain -> speakers
+        source.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(audioContext.destination);
+
+        buffers = [];
+        sampleCount = 0;
+        transcriptChunks.length = 0;
+        queue = Promise.resolve();
+        chunkList.replaceChildren();
+        voiceSummary.classList.remove('error');
+        voiceSummary.textContent = 'Your complete note will appear here after you stop recording.';
+
+        const chunkSamples = Math.round(audioContext.sampleRate * CHUNK_MS / 1000);
+        processor.onaudioprocess = e => {
+          if (!recording) return;
+          const data = new Float32Array(e.inputBuffer.getChannelData(0)); // copy: browser reuses buffer
+          buffers.push(data);
+          sampleCount += data.length;
+          while (sampleCount >= chunkSamples) enqueueChunk(takeSamples(chunkSamples));
+        };
+
+        recording = true;
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        recordingStatus.textContent = 'Recording…';
+      } catch (err) {
+        cleanupAudio();
+        recordingStatus.textContent = 'Could not access microphone: ' + (err.message || err.name);
+        recordingStatus.classList.add('error');
+        startButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    }
+
+    function cleanupAudio() {
+      if (processor) { processor.onaudioprocess = null; try { processor.disconnect(); } catch {} }
+      if (source) { try { source.disconnect(); } catch {} }
+      if (silentGain) { try { silentGain.disconnect(); } catch {} }
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (audioContext && audioContext.state !== 'closed') audioContext.close();
+      audioContext = stream = source = processor = silentGain = null;
+      buffers = [];
+      sampleCount = 0;
+    }
+
+    function stopCapture(flushRemaining) {
+      recording = false;
+      // Send the last partial chunk (skip anything under 0.5 s)
+      if (flushRemaining && audioContext && sampleCount > audioContext.sampleRate * 0.5) {
+        enqueueChunk(takeSamples(sampleCount));
+      }
+      cleanupAudio();
+    }
+
+    function renderVoiceSummary(note) {
+      voiceSummary.classList.remove('error');
+      voiceSummary.replaceChildren();
+      const add = (tag, text) => {
+        const el = document.createElement(tag);
+        el.textContent = text || '';
+        voiceSummary.append(el);
+      };
+      add('h3', 'Summary');
+      add('p', note.summary);
+      if (Array.isArray(note.pointers) && note.pointers.length) {
+        add('h3', 'Pointers');
+        const ul = document.createElement('ul');
+        note.pointers.forEach(p => { const li = document.createElement('li'); li.textContent = p; ul.append(li); });
+        voiceSummary.append(ul);
+      }
+    }
+
+    async function stopAndSummarize() {
+      if (!recording || finishing) return;
+      finishing = true;
+      stopCapture(true);
+      startButton.disabled = true;
+      stopButton.disabled = true;
+      recordingStatus.classList.remove('error');
+      recordingStatus.textContent = 'Recording stopped. Finishing transcription…';
+
+      try {
+        await queue;
+        const fullTranscript = transcriptChunks.join('\n').trim();
+        if (!fullTranscript) {
+          voiceSummary.textContent = 'No speech was transcribed, so there is nothing to summarize.';
+          recordingStatus.textContent = 'Recording stopped.';
+          return;
+        }
+        recordingStatus.textContent = 'Writing your class note…';
+        const response = await fetch('/api/summarize-transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript: fullTranscript })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || `Summary failed (${response.status})`);
+        renderVoiceSummary(data);
+        recordingStatus.textContent = 'Class note is ready.';
+      } catch (error) {
+        voiceSummary.textContent = error.message || 'Could not summarize this recording.';
+        voiceSummary.classList.add('error');
+        recordingStatus.textContent = 'Could not create the class note.';
+        recordingStatus.classList.add('error');
+      } finally {
+        finishing = false;
+        startButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    }
+
+    startButton.addEventListener('click', startCapture);
+    stopButton.addEventListener('click', stopAndSummarize);
+
+    window.addEventListener('beforeunload', () => {
+      pageClosing = true;
+      if (recording) stopCapture(false);
+      if (ws) ws.close();
+    });
+  </script>
+</body>
+</html>
