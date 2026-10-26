@@ -121,6 +121,7 @@ ADMIN_REGISTRATION_CODE=choose-a-long-private-code
 Save the file and start SynQ:
 
 ```powershell
+set GROQ_API_KEY=your_key_here
 python main.py
 ```
 
